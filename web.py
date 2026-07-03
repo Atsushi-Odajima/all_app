@@ -16,6 +16,7 @@ GitHubの公式リリースから tools/ にダウンロードする。
 起動:  python web.py   (または run_web.bat)
 """
 import re
+import socket
 import subprocess
 import sys
 import threading
@@ -79,8 +80,33 @@ def run_server() -> None:
     app.run(host="127.0.0.1", port=PORT, threaded=True)
 
 
+def _cleanup_stale() -> None:
+    """前回の残骸 (生き残ったトンネルプロセス) を掃除する。
+
+    ウィンドウを×ボタンで閉じるとPythonだけ死んでcloudflaredが残り、
+    古い無効なURLのトンネルが漂い続けるため、起動時に必ず一掃する。
+    """
+    subprocess.run(
+        ["taskkill", "/F", "/IM", "cloudflared.exe"],
+        capture_output=True,
+    )
+
+
+def _port_in_use(port: int) -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        return s.connect_ex(("127.0.0.1", port)) == 0
+
+
 def main() -> None:
     ensure_cloudflared()
+    _cleanup_stale()
+
+    if _port_in_use(PORT):
+        print("既にAll/Appサーバーが起動しています。")
+        print("先に他の黒いウィンドウ (run_web.bat / run_mobile.bat) を"
+              "閉じてから、もう一度起動してください。")
+        input("Enterキーで終了...")
+        return
 
     # Flaskサーバーをバックグラウンドで起動
     threading.Thread(target=run_server, daemon=True).start()
