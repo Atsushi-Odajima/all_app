@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>All/App</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/static/star_32.png">
+<link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="All/App">
+<meta name="theme-color" content="#ffffff">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <svg viewBox="0 0 24 24" class="star"><polygon points="12,22 14.4,14.6 22,14.6 15.8,10.2 18.2,3 12,7.6 5.8,3 8.2,10.2 2,14.6 9.6,14.6" fill="#111"/></svg>
+    <b>All/App</b>
+  </div>
+  <select id="platformSelect" aria-label="プラットフォーム切替"></select>
+</header>
+
+<main>
+  <!-- ネタ収集 -->
+  <section id="pane-trends" class="pane active">
+    <h2 id="trendsTitle">ネタ収集</h2>
+    <p class="subtle" id="trendsCriteria"></p>
+    <input id="trendsQuery" class="hidden" placeholder="検索キーワード (空欄なら急上昇ワードを自動使用)">
+    <button class="primary" id="trendsRefresh">更新 (バズ投稿 上位5件)</button>
+    <p id="trendsStatus" class="subtle"></p>
+    <div id="trendsItems"></div>
+    <a id="trendsFallback" class="btn block" target="_blank" rel="noopener">トレンドページを開く</a>
+  </section>
+
+  <!-- 記事作成 -->
+  <section id="pane-compose" class="pane">
+    <h2 id="composeTitle">記事作成</h2>
+    <p class="subtle">プロンプトを生成してコピー → AIアプリ/サイトに貼り付け</p>
+    <input id="topic" placeholder="ネタ・テーマ">
+    <select id="contentType"></select>
+    <div class="row">
+      <input id="affiliate" placeholder="アフィリエイトURL (任意)">
+      <select id="linkPicker"><option value="">リンク集…</option></select>
+    </div>
+    <input id="notes" placeholder="ターゲット・補足 (任意)">
+    <button class="primary" id="genPrompt">プロンプトを生成</button>
+    <textarea id="promptOut" rows="9" placeholder="ここに生成されたプロンプトが表示されます"></textarea>
+    <div class="row">
+      <button id="copyPrompt">コピー</button>
+      <button id="saveDraft">下書き保存</button>
+    </div>
+    <div class="row">
+      <select id="aiPicker"></select>
+      <button id="openAi">コピーしてAIを開く</button>
+    </div>
+    <h3>投稿する</h3>
+    <p class="subtle">AIが作った完成文を下に貼り付けて投稿へ (ログイン状態はSafariが保持)</p>
+    <textarea id="postText" rows="5" placeholder="完成した投稿文をここに貼り付け"></textarea>
+    <button class="primary" id="goPost">投稿画面を開く</button>
+    <p class="subtle" id="goPostNote"></p>
+    <h3>下書き</h3>
+    <div id="draftsList"></div>
+  </section>
+
+  <!-- 実績 -->
+  <section id="pane-stats" class="pane">
+    <h2 id="statsTitle">実績</h2>
+    <p class="subtle" id="statsTotals"></p>
+    <div class="card form">
+      <input id="postTitle" placeholder="投稿タイトル">
+      <div class="row">
+        <input id="postAccount" placeholder="アカウント">
+        <input id="postUrl" placeholder="URL (任意)">
+      </div>
+      <button class="primary" id="addPost">投稿を記録</button>
+    </div>
+    <div id="postsList"></div>
+  </section>
+
+  <!-- アカウント -->
+  <section id="pane-accounts" class="pane">
+    <h2 id="accountsTitle">アカウント</h2>
+    <div class="card">
+      <div class="title">ログイン・投稿</div>
+      <div class="meta">一度ログインすればSafariが状態を保持します (凍結回避の手動方式)</div>
+      <div class="row">
+        <a id="loginOpen" class="btn" target="_blank" rel="noopener">サイトを開く (ログイン)</a>
+        <a id="postOpen" class="btn" target="_blank" rel="noopener">投稿画面を開く</a>
+      </div>
+      <div class="meta" id="postNote"></div>
+    </div>
+    <div class="card form">
+      <div class="row">
+        <input id="accHandle" placeholder="ハンドル (@なし)">
+        <input id="accName" placeholder="表示名">
+      </div>
+      <button class="primary" id="addAccount">追加</button>
+    </div>
+    <div id="accountsList"></div>
+  </section>
+
+  <!-- アフィリエイト -->
+  <section id="pane-affiliate" class="pane">
+    <h2>アフィリエイト (ASP)</h2>
+    <p class="subtle">ASPのサイトを開いてログイン。取得したリンクは下に登録するとPC版と共有されます</p>
+    <div id="aspList"></div>
+    <h3>マイリンク集</h3>
+    <div class="card form">
+      <input id="linkName" placeholder="案件名">
+      <div class="row">
+        <select id="linkAsp"><option value="">(その他)</option></select>
+        <input id="linkUrl" placeholder="アフィリエイトURL">
+      </div>
+      <button class="primary" id="addLink">登録</button>
+    </div>
+    <div id="linksList"></div>
+  </section>
+</main>
+
+<nav>
+  <button data-pane="trends" class="active"><span>&#128293;</span>ネタ</button>
+  <button data-pane="compose"><span>&#9997;&#65039;</span>作成</button>
+  <button data-pane="stats"><span>&#128202;</span>実績</button>
+  <button data-pane="accounts"><span>&#128100;</span>垢</button>
+  <button data-pane="affiliate"><span>&#128176;</span>アフィリ</button>
+</nav>
+
+<div id="toast"></div>
+<script src="/static/app.js"></script>
+</body>
+</html>

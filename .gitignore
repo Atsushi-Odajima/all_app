@@ -1,0 +1,11 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Cloudflare Tunnel クライアント (初回起動時に自動ダウンロードされる)
+tools/
+*.download
+
+# ローカル環境固有
+*.log

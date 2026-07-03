@@ -1,0 +1,379 @@
+"""All/App モバイル版サーバー (iPhone / Android / タブレット用)
+
+PC上で起動し、同じWi-Fi内のスマートフォンのブラウザからアクセスする。
+デスクトップ版と同じSQLite・ネタ収集エンジン・プロンプト生成を共有するため、
+どちらで操作してもデータは常に同期されている。
+
+起動:  python mobile.py   (または run_mobile.bat)
+"""
+import secrets
+import socket
+import time
+from datetime import timedelta
+from pathlib import Path
+
+from flask import (
+    Flask,
+    g,
+    jsonify,
+    redirect,
+    request,
+    send_from_directory,
+    session,
+)
+
+from .config import (
+    DATA_DIR,
+    AI_CATEGORIES,
+    AI_SERVICES,
+    ASPS,
+    DB_PATH,
+    PLATFORM_BY_ID,
+    PLATFORM_CATEGORIES,
+    PLATFORMS,
+)
+from .database import Database
+from .prompts import CONTENT_TYPES, build_prompt
+from .trends import fetch_trends, query_mode
+
+STATIC_DIR = Path(__file__).parent / "web" / "static"
+
+app = Flask(__name__, static_folder=str(STATIC_DIR), static_url_path="/static")
+
+
+# ------------------------------------------------------------ 認証 (PIN)
+def _load_or_create(path: Path, generator) -> str:
+    if path.exists():
+        value = path.read_text(encoding="utf-8").strip()
+        if value:
+            return value
+    value = generator()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(value, encoding="utf-8")
+    return value
+
+
+def get_pin() -> str:
+    """アクセス用PIN。~/.allapp/mobile_pin.txt を編集すれば変更できる"""
+    return _load_or_create(
+        DATA_DIR / "mobile_pin.txt",
+        lambda: f"{secrets.randbelow(10 ** 8):08d}",  # 8桁の数字
+    )
+
+
+app.secret_key = _load_or_create(
+    DATA_DIR / "secret_key.txt", lambda: secrets.token_hex(32))
+app.permanent_session_lifetime = timedelta(days=90)
+
+_fail_count = 0
+_LOGIN_PAGE = """<!DOCTYPE html>
+<html lang="ja"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>All/App - ログイン</title>
+<style>
+body {{ background:#fff; color:#1a1a1a; margin:0; display:flex;
+  align-items:center; justify-content:center; min-height:100vh;
+  font-family:-apple-system,"Hiragino Kaku Gothic ProN",sans-serif; }}
+.box {{ text-align:center; padding:24px; width:280px; }}
+svg {{ width:56px; height:56px; }}
+input {{ width:100%; box-sizing:border-box; font-size:22px; text-align:center;
+  letter-spacing:4px; border:1px solid #d9d9d9; border-radius:10px;
+  padding:12px; margin:16px 0 10px; }}
+button {{ width:100%; background:#111; color:#fff; border:none;
+  border-radius:10px; padding:13px; font-size:15px; font-weight:600; }}
+.err {{ color:#c0392b; font-size:13px; min-height:18px; }}
+p {{ color:#777; font-size:13px; }}
+</style></head><body>
+<div class="box">
+<svg viewBox="0 0 24 24"><polygon points="12,22 14.4,14.6 22,14.6 15.8,10.2
+ 18.2,3 12,7.6 5.8,3 8.2,10.2 2,14.6 9.6,14.6" fill="#111"/></svg>
+<h2>All/App</h2>
+<p>PCの起動画面に表示されているPINを入力してください</p>
+<form method="post" action="/login">
+<input name="pin" inputmode="numeric" autocomplete="one-time-code"
+ placeholder="PIN" autofocus>
+<div class="err">{error}</div>
+<button type="submit">ログイン</button>
+</form>
+</div></body></html>"""
+
+
+@app.get("/login")
+def login_page():
+    return _LOGIN_PAGE.format(error="")
+
+
+@app.post("/login")
+def login_post():
+    global _fail_count
+    pin = (request.form.get("pin") or "").strip()
+    if secrets.compare_digest(pin, get_pin()):
+        _fail_count = 0
+        session.permanent = True
+        session["auth"] = True
+        return redirect("/")
+    _fail_count += 1
+    time.sleep(min(_fail_count, 10))  # 総当たり対策
+    return _LOGIN_PAGE.format(error="PINが違います"), 401
+
+
+@app.before_request
+def require_auth():
+    if request.path in ("/login",) or request.path.startswith("/static/"):
+        return None
+    if request.path == "/manifest.webmanifest":
+        return None
+    if session.get("auth"):
+        return None
+    if request.path.startswith("/api/"):
+        return jsonify({"error": "ログインしてください"}), 401
+    # リダイレクトせずログインページをそのまま返す (200)
+    return _LOGIN_PAGE.format(error="")
+
+
+# ---------------------------------------------------------------- DB
+def get_db() -> Database:
+    """リクエストごとに接続を開く (WAL + busy_timeout で並行アクセス安全)"""
+    if "db" not in g:
+        g.db = Database(DB_PATH)
+    return g.db
+
+
+@app.teardown_appcontext
+def close_db(_exc) -> None:
+    db = g.pop("db", None)
+    if db is not None:
+        db.close()
+
+
+# ---------------------------------------------------------------- 画面
+@app.get("/")
+def index():
+    return send_from_directory(STATIC_DIR, "index.html")
+
+
+@app.get("/manifest.webmanifest")
+def manifest():
+    return send_from_directory(STATIC_DIR, "manifest.webmanifest")
+
+
+# ---------------------------------------------------------------- API
+@app.get("/api/init")
+def api_init():
+    """アプリ初期化に必要な定義一式"""
+    return jsonify({
+        "categories": PLATFORM_CATEGORIES,
+        "platforms": [
+            {
+                "id": p.id, "name": p.name, "category": p.category,
+                "home_url": p.home_url,
+                "trend_fallback_url": p.trend_fallback_url,
+                "trend_criteria": p.trend_criteria,
+                "metrics": list(p.metrics),
+                "auto_trend": p.auto_trend,
+                "account_url_format": p.account_url_format,
+                "post_url": p.post_url or p.home_url,
+                "intent_format": p.intent_format,
+                "post_note": p.post_note,
+                "trend_query": query_mode(p.id),
+            }
+            for p in PLATFORMS
+        ],
+        "content_types": CONTENT_TYPES,
+        "ai_categories": AI_CATEGORIES,
+        "ai_services": [
+            {"id": s.id, "name": s.name, "url": s.url,
+             "category": s.category}
+            for s in AI_SERVICES
+        ],
+        "asps": [
+            {"id": a.id, "name": a.name, "login_url": a.login_url,
+             "note": a.note}
+            for a in ASPS
+        ],
+    })
+
+
+@app.get("/api/trends/<platform_id>")
+def api_trends(platform_id: str):
+    if platform_id not in PLATFORM_BY_ID:
+        return jsonify({"error": "unknown platform"}), 404
+    result = fetch_trends(platform_id, request.args.get("q", ""))
+    return jsonify({
+        "ok": result.ok,
+        "note": result.note,
+        "items": [
+            {"title": i.title, "url": i.url, "metric": i.metric}
+            for i in result.items
+        ],
+    })
+
+
+@app.post("/api/prompt")
+def api_prompt():
+    data = request.get_json(force=True)
+    platform = PLATFORM_BY_ID.get(data.get("platform_id", ""))
+    if platform is None:
+        return jsonify({"error": "unknown platform"}), 404
+    prompt = build_prompt(
+        platform.id, platform.name,
+        data.get("content_type", CONTENT_TYPES[0]),
+        data.get("topic", ""),
+        data.get("affiliate", ""),
+        data.get("notes", ""),
+        category=platform.category,
+    )
+    return jsonify({"prompt": prompt})
+
+
+# ---------------- アカウント ----------------
+@app.get("/api/accounts/<platform_id>")
+def api_accounts(platform_id: str):
+    rows = get_db().list_accounts(platform_id)
+    return jsonify([dict(r) for r in rows])
+
+
+@app.post("/api/accounts/<platform_id>")
+def api_accounts_add(platform_id: str):
+    data = request.get_json(force=True)
+    handle = (data.get("handle") or "").strip().lstrip("@")
+    if not handle:
+        return jsonify({"error": "handle required"}), 400
+    get_db().add_account(
+        platform_id, handle,
+        (data.get("display_name") or "").strip(),
+        (data.get("memo") or "").strip(),
+    )
+    return jsonify({"ok": True})
+
+
+@app.delete("/api/accounts/item/<int:account_id>")
+def api_accounts_delete(account_id: int):
+    get_db().delete_account(account_id)
+    return jsonify({"ok": True})
+
+
+# ---------------- 投稿実績 ----------------
+@app.get("/api/posts/<platform_id>")
+def api_posts(platform_id: str):
+    rows = get_db().list_posts(platform_id)
+    return jsonify([dict(r) for r in rows])
+
+
+@app.post("/api/posts/<platform_id>")
+def api_posts_add(platform_id: str):
+    data = request.get_json(force=True)
+    title = (data.get("title") or "").strip()
+    if not title:
+        return jsonify({"error": "title required"}), 400
+    post_id = get_db().add_post(
+        platform_id, title,
+        (data.get("account_handle") or "").strip(),
+        (data.get("url") or "").strip(),
+    )
+    return jsonify({"ok": True, "id": post_id})
+
+
+@app.patch("/api/posts/item/<int:post_id>")
+def api_posts_update(post_id: int):
+    data = request.get_json(force=True)
+    column = data.get("column", "")
+    value = data.get("value", "")
+    if column.startswith("metric"):
+        try:
+            value = int(str(value).replace(",", "") or 0)
+        except ValueError:
+            return jsonify({"error": "数値を入力してください"}), 400
+    try:
+        get_db().update_post_field(post_id, column, value)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify({"ok": True})
+
+
+@app.delete("/api/posts/item/<int:post_id>")
+def api_posts_delete(post_id: int):
+    get_db().delete_post(post_id)
+    return jsonify({"ok": True})
+
+
+# ---------------- 下書き ----------------
+@app.get("/api/drafts/<platform_id>")
+def api_drafts(platform_id: str):
+    rows = get_db().list_drafts(platform_id)
+    return jsonify([dict(r) for r in rows])
+
+
+@app.post("/api/drafts/<platform_id>")
+def api_drafts_add(platform_id: str):
+    data = request.get_json(force=True)
+    body = (data.get("body") or "").strip()
+    if not body:
+        return jsonify({"error": "body required"}), 400
+    title = (data.get("title") or "").strip() or body.splitlines()[0][:30]
+    get_db().add_draft(platform_id, title, body)
+    return jsonify({"ok": True})
+
+
+@app.delete("/api/drafts/item/<int:draft_id>")
+def api_drafts_delete(draft_id: int):
+    get_db().delete_draft(draft_id)
+    return jsonify({"ok": True})
+
+
+# ---------------- アフィリエイトリンク ----------------
+@app.get("/api/links")
+def api_links():
+    rows = get_db().list_affiliate_links()
+    return jsonify([dict(r) for r in rows])
+
+
+@app.post("/api/links")
+def api_links_add():
+    data = request.get_json(force=True)
+    name = (data.get("name") or "").strip()
+    url = (data.get("url") or "").strip()
+    if not name or not url:
+        return jsonify({"error": "name and url required"}), 400
+    get_db().add_affiliate_link(
+        (data.get("asp") or "").strip(), name, url)
+    return jsonify({"ok": True})
+
+
+@app.delete("/api/links/<int:link_id>")
+def api_links_delete(link_id: int):
+    get_db().delete_affiliate_link(link_id)
+    return jsonify({"ok": True})
+
+
+# ---------------------------------------------------------------- 起動
+def lan_ip() -> str:
+    """このPCのLAN内IPアドレスを取得する"""
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("8.8.8.8", 80))  # 実際には送信しない
+        return s.getsockname()[0]
+    except OSError:
+        return "127.0.0.1"
+    finally:
+        s.close()
+
+
+def main(port: int = 8787, quiet: bool = False) -> None:
+    if not quiet:
+        ip = lan_ip()
+        print()
+        print("=" * 52)
+        print("  All/App モバイル版サーバー起動")
+        print(f"  iPhoneのSafariで開く: http://{ip}:{port}")
+        print("  (PCと同じWi-Fiに接続してください)")
+        print(f"  ログインPIN: {get_pin()}")
+        print("  ホーム画面に追加するとアプリのように使えます")
+        print("=" * 52)
+        print()
+    app.run(host="0.0.0.0", port=port, threaded=True)
+
+
+if __name__ == "__main__":
+    main()
