@@ -52,7 +52,7 @@ class BrowserView(QWebEngineView):
     def createWindow(self, _type):  # noqa: N802 (Qt override)
         # ログイン時のポップアップウィンドウ等を同じプロファイルで開く
         dialog = QDialog(self.window())
-        dialog.setWindowTitle("All/App - ポップアップ")
+        dialog.setWindowTitle("All/Agent - ポップアップ")
         dialog.resize(520, 680)
         layout = QVBoxLayout(dialog)
         layout.setContentsMargins(0, 0, 0, 0)

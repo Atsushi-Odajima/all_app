@@ -1,4 +1,4 @@
-/* All/App モバイル版 SPA */
+/* All/Agent モバイル版 SPA */
 "use strict";
 
 const state = {

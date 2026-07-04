@@ -132,7 +132,7 @@ class StatsPanel(QWidget):
             try:
                 value = int(value.replace(",", "") or 0)
             except ValueError:
-                QMessageBox.warning(self, "All/App", "数値を入力してください")
+                QMessageBox.warning(self, "All/Agent", "数値を入力してください")
                 self.reload()
                 return
         self.db.update_post_field(post_id, column, value)
@@ -150,7 +150,7 @@ class StatsPanel(QWidget):
             return
         title = self.title_edit.text().strip()
         if not title:
-            QMessageBox.information(self, "All/App",
+            QMessageBox.information(self, "All/Agent",
                                     "投稿タイトルを入力してください")
             return
         self.db.add_post(
@@ -168,7 +168,7 @@ class StatsPanel(QWidget):
             return
         item = self.table.item(row, 0)
         ret = QMessageBox.question(
-            self, "All/App", f"「{item.text()}」の記録を削除しますか？")
+            self, "All/Agent", f"「{item.text()}」の記録を削除しますか？")
         if ret == QMessageBox.StandardButton.Yes:
             self.db.delete_post(item.data(0x0100))
             self.reload()

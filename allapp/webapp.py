@@ -1,4 +1,4 @@
-"""All/App モバイル版サーバー (iPhone / Android / タブレット用)
+"""All/Agent モバイル版サーバー (iPhone / Android / タブレット用)
 
 PC上で起動し、同じWi-Fi内のスマートフォンのブラウザからアクセスする。
 デスクトップ版と同じSQLite・ネタ収集エンジン・プロンプト生成を共有するため、
@@ -75,7 +75,7 @@ _LOGIN_PAGE = """<!DOCTYPE html>
 <html lang="ja"><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>All/App - ログイン</title>
+<title>All/Agent - ログイン</title>
 <style>
 body {{ background:#fff; color:#1a1a1a; margin:0; display:flex;
   align-items:center; justify-content:center; min-height:100vh;
@@ -91,9 +91,13 @@ button {{ width:100%; background:#111; color:#fff; border:none;
 p {{ color:#777; font-size:13px; }}
 </style></head><body>
 <div class="box">
-<svg viewBox="0 0 24 24"><polygon points="12,22 14.4,14.6 22,14.6 15.8,10.2
- 18.2,3 12,7.6 5.8,3 8.2,10.2 2,14.6 9.6,14.6" fill="#111"/></svg>
-<h2>All/App</h2>
+<svg viewBox="0 0 24 24"><path d="M12.0,9.0 L10.76,6.64 L12.0,2.0 L13.24,6.64 Z
+ M14.6,10.5 L16.02,8.25 L20.66,7.0 L17.26,10.39 Z
+ M14.6,13.5 L17.26,13.61 L20.66,17.0 L16.02,15.75 Z
+ M12.0,15.0 L13.24,17.36 L12.0,22.0 L10.76,17.36 Z
+ M9.4,13.5 L7.98,15.75 L3.34,17.0 L6.74,13.61 Z
+ M9.4,10.5 L6.74,10.39 L3.34,7.0 L7.98,8.25 Z" fill="#111"/></svg>
+<h2>All/Agent</h2>
 <p>PCの起動画面に表示されているPINを入力してください</p>
 <form method="post" action="/login">
 <input name="pin" inputmode="numeric" autocomplete="one-time-code"
@@ -503,7 +507,7 @@ def main(port: int = 8787, quiet: bool = False) -> None:
         ip = lan_ip()
         print()
         print("=" * 52)
-        print("  All/App モバイル版サーバー起動")
+        print("  All/Agent モバイル版サーバー起動")
         print(f"  iPhoneのSafariで開く: http://{ip}:{port}")
         print("  (PCと同じWi-Fiに接続してください)")
         print(f"  ログインPIN: {get_pin()}")

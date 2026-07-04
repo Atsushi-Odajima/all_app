@@ -104,7 +104,7 @@ class AccountsPanel(QWidget):
             return
         handle = self.handle_edit.text().strip().lstrip("@")
         if not handle:
-            QMessageBox.information(self, "All/App", "ハンドルを入力してください")
+            QMessageBox.information(self, "All/Agent", "ハンドルを入力してください")
             return
         self.db.add_account(
             self.platform.id, handle, self.name_edit.text().strip(), ""
@@ -124,7 +124,7 @@ class AccountsPanel(QWidget):
             return
         row = self._selected_row()
         if row < 0:
-            QMessageBox.information(self, "All/App", "アカウントを選択してください")
+            QMessageBox.information(self, "All/Agent", "アカウントを選択してください")
             return
         handle = self.table.item(row, 0).text()
         url = self.platform.account_url_format.format(handle=handle)
@@ -136,7 +136,7 @@ class AccountsPanel(QWidget):
             return
         item = self.table.item(row, 0)
         ret = QMessageBox.question(
-            self, "All/App",
+            self, "All/Agent",
             f"アカウント「{item.text()}」を削除しますか？",
         )
         if ret == QMessageBox.StandardButton.Yes:

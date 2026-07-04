@@ -1,4 +1,4 @@
-"""All/App - マルチプラットフォームSNS運用管理アプリ"""
+"""All/Agent - マルチプラットフォームSNS運用管理アプリ"""
 
 __version__ = "1.0.0"
-APP_NAME = "All/App"
+APP_NAME = "All/Agent"

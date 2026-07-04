@@ -1,4 +1,4 @@
-"""All/App エントリポイント
+"""All/Agent エントリポイント
 
 起動:  python main.py   (または run.bat)
 """
@@ -14,7 +14,7 @@ from allapp.ui.style import APP_STYLE
 
 
 def main() -> int:
-    QApplication.setApplicationName("All/App")
+    QApplication.setApplicationName("All/Agent")
     QApplication.setOrganizationName("AllApp")
     app = QApplication(sys.argv)
     app.setStyleSheet(APP_STYLE)

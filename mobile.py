@@ -1,4 +1,4 @@
-"""All/App モバイル版サーバー起動用エントリポイント
+"""All/Agent モバイル版サーバー起動用エントリポイント
 
 iPhone等からの利用方法:
 1. このスクリプトをPCで起動 (python mobile.py または run_mobile.bat)

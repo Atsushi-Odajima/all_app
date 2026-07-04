@@ -127,7 +127,7 @@ class AffiliatePanel(QWidget):
     def _open_selected_asp(self) -> None:
         item = self.asp_list.currentItem()
         if item is None:
-            QMessageBox.information(self, "All/App", "ASPを選択してください")
+            QMessageBox.information(self, "All/Agent", "ASPを選択してください")
             return
         self.open_asp_requested.emit(item.data(0x0100))
 
@@ -171,7 +171,7 @@ class AffiliatePanel(QWidget):
         url = self.url_edit.text().strip()
         if not name or not url:
             QMessageBox.information(
-                self, "All/App", "案件名とURLを入力してください")
+                self, "All/Agent", "案件名とURLを入力してください")
             return
         asp = self.asp_combo.currentText()
         if asp == "(その他)":
@@ -188,7 +188,7 @@ class AffiliatePanel(QWidget):
             return
         item = self.table.item(row, 0)
         ret = QMessageBox.question(
-            self, "All/App", f"リンク「{item.text()}」を削除しますか？")
+            self, "All/Agent", f"リンク「{item.text()}」を削除しますか？")
         if ret == QMessageBox.StandardButton.Yes:
             self.db.delete_affiliate_link(item.data(0x0100))
             self.reload_links()

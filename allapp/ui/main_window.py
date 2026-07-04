@@ -1,6 +1,6 @@
-"""All/App メインウィンドウ
+"""All/Agent メインウィンドウ
 
-上部ツールバー: 逆さ星アイコン + プラットフォーム切替プルダウン + ブラウザ操作
+上部ツールバー: ✲ロゴアイコン + プラットフォーム切替プルダウン + ブラウザ操作
 左パネル: アカウント / ネタ収集 / 記事作成 / 実績 / アフィリ
 右側: プラットフォーム別の永続セッション付きアプリ内ブラウザ
 (AIツール用・ASP用にも独立した永続プロファイルを持つ)
@@ -52,7 +52,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         ensure_dirs()
         self.db = Database(DB_PATH)
-        self.setWindowTitle("All/App - マルチプラットフォーム運用管理")
+        self.setWindowTitle("All/Agent - マルチプラットフォーム運用管理")
         self.setWindowIcon(make_app_icon())
 
         # プラットフォームごとのブラウザ (遅延生成でメモリ節約。
@@ -81,7 +81,7 @@ class MainWindow(QMainWindow):
         icon_label.setContentsMargins(4, 0, 2, 0)
         bar.addWidget(icon_label)
 
-        title = QLabel("<b>All/App</b>")
+        title = QLabel("<b>All/Agent</b>")
         title.setContentsMargins(0, 0, 10, 0)
         bar.addWidget(title)
 
@@ -259,7 +259,7 @@ class MainWindow(QMainWindow):
         if not pid:  # カテゴリ見出し
             return
         platform = self._current_platform()
-        self.setWindowTitle(f"All/App - {platform.name}")
+        self.setWindowTitle(f"All/Agent - {platform.name}")
         view = self._ensure_view(platform)
         self.browser_stack.setCurrentWidget(view)
         self.url_edit.setText(view.url().toString())

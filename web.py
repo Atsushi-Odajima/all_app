@@ -1,4 +1,4 @@
-"""All/App Web公開版ランチャー — 外出先からもアプリを使えるようにする
+"""All/Agent Web公開版ランチャー — 外出先からもアプリを使えるようにする
 
 仕組み:
   PC上のモバイルサーバー (mobile.py と同じもの) を Cloudflare Tunnel 経由で
@@ -102,7 +102,7 @@ def main() -> None:
     _cleanup_stale()
 
     if _port_in_use(PORT):
-        print("既にAll/Appサーバーが起動しています。")
+        print("既にAll/Agentサーバーが起動しています。")
         print("先に他の黒いウィンドウ (run_web.bat / run_mobile.bat) を"
               "閉じてから、もう一度起動してください。")
         input("Enterキーで終了...")
@@ -127,7 +127,7 @@ def main() -> None:
                     url = m.group(0)
                     print()
                     print("=" * 56)
-                    print("  All/App Web版 公開中!")
+                    print("  All/Agent Web版 公開中!")
                     print(f"  外出先からのURL: {url}")
                     print(f"  ログインPIN:     {get_pin()}")
                     print()

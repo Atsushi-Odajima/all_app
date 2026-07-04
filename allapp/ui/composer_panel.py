@@ -151,7 +151,7 @@ class ComposerPanel(QWidget):
     def _copy(self) -> bool:
         text = self.preview.toPlainText().strip()
         if not text:
-            QMessageBox.information(self, "All/App",
+            QMessageBox.information(self, "All/Agent",
                                     "先にプロンプトを生成してください")
             return False
         QGuiApplication.clipboard().setText(text)

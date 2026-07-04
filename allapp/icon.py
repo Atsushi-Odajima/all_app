@@ -1,37 +1,45 @@
-"""アプリアイコン: ★を逆さにした (下向きの) 星をコードで描画する"""
+"""アプリアイコン: 白地に ✲ (中心の開いた6本腕アスタリスク) をコードで描画する"""
 import math
 
 from PySide6.QtCore import QPointF, Qt
 from PySide6.QtGui import QColor, QIcon, QPainter, QPainterPath, QPixmap
 
+# ✲ の形状パラメータ (外径=1.0 とした比率)
+_INNER = 0.30   # 腕の付け根の半径 (ここが空く=オープンセンター)
+_MID = 0.55     # 腕が最も太くなる位置の半径
+_TIP = 1.0      # 腕の先端
+_SPREAD_DEG = 13.0  # 腕の太さ (中間点の開き角)
 
-def _star_path(cx: float, cy: float, outer: float, inner: float,
-               inverted: bool = True) -> QPainterPath:
-    """5点星のパスを作る。inverted=True で下向き (逆さ星)"""
-    # 通常の★は頂点が真上 (-90°)。逆さ星は頂点が真下 (+90°) に来る。
-    start_deg = 90.0 if inverted else -90.0
+
+def _asterisk_path(cx: float, cy: float, outer: float) -> QPainterPath:
+    """✲ のパスを作る。6本の腕 (凧形) を60°間隔で配置、中心は開ける"""
     path = QPainterPath()
-    for i in range(10):
-        radius = outer if i % 2 == 0 else inner
-        deg = start_deg + i * 36.0
-        rad = math.radians(deg)
-        pt = QPointF(cx + radius * math.cos(rad), cy + radius * math.sin(rad))
-        if i == 0:
-            path.moveTo(pt)
-        else:
+    for i in range(6):
+        deg = -90.0 + i * 60.0  # 1本目は真上
+        arm = []
+        for r, d in ((_INNER, 0.0), (_MID, -_SPREAD_DEG),
+                     (_TIP, 0.0), (_MID, _SPREAD_DEG)):
+            rad = math.radians(deg + d)
+            arm.append(QPointF(cx + outer * r * math.cos(rad),
+                               cy + outer * r * math.sin(rad)))
+        path.moveTo(arm[0])
+        for pt in arm[1:]:
             path.lineTo(pt)
-    path.closeSubpath()
+        path.closeSubpath()
     return path
 
 
-def make_star_pixmap(size: int = 256, color: str = "#111111") -> QPixmap:
+def make_star_pixmap(size: int = 256, color: str = "#111111",
+                     background: str = "#ffffff") -> QPixmap:
+    """白地に✲のロゴ。background=None で透過背景"""
     pm = QPixmap(size, size)
-    pm.fill(Qt.GlobalColor.transparent)
+    if background:
+        pm.fill(QColor(background))
+    else:
+        pm.fill(Qt.GlobalColor.transparent)
     painter = QPainter(pm)
     painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-    outer = size * 0.44
-    inner = outer * 0.42
-    path = _star_path(size / 2, size / 2, outer, inner, inverted=True)
+    path = _asterisk_path(size / 2, size / 2, size * 0.42)
     painter.setPen(Qt.PenStyle.NoPen)
     painter.setBrush(QColor(color))
     painter.drawPath(path)

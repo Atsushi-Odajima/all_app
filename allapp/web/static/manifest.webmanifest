@@ -1,6 +1,6 @@
 {
-  "name": "All/App",
-  "short_name": "All/App",
+  "name": "All/Agent",
+  "short_name": "All/Agent",
   "description": "マルチプラットフォームSNS運用管理",
   "start_url": "/",
   "display": "standalone",

@@ -1,4 +1,4 @@
-"""All/App AI部下ワーカー — 自動投稿・返信・バズ検知の実行体
+"""All/Agent AI部下ワーカー — 自動投稿・返信・バズ検知の実行体
 
 独立した常駐プロセスとして動く (レビュー指摘 C-1 反映):
 - Flask (mobile.py / web.py) はUIとして当日ジョブをDBに書くだけ
@@ -27,7 +27,7 @@ def main() -> None:
         store.log("warn", f"前回中断されたジョブ{stuck}件をエラー扱いにしました")
     store.log("ok", "AI部下ワーカーを起動しました (PCオンライン)")
     print("=" * 56)
-    print("  All/App AI部下ワーカー 稼働中")
+    print("  All/Agent AI部下ワーカー 稼働中")
     print("  iPhoneの「AI部下」タブから操作してください")
     print("  このウィンドウを閉じると自動投稿は停止します")
     print("=" * 56, flush=True)
