@@ -509,8 +509,8 @@ async function checkAgentMorningModal() {
   const personas = await api("/api/agent/personas");
   if (!status.has_plan && personas.length > 0) {
     $("agentModalNote").textContent = status.worker_online
-      ? "※PCの電源が入っている時間帯のみ自動投稿されます"
-      : "⚠ PCのワーカー(run_agent.bat)が起動していません。プランだけ作成し、ワーカー起動後に実行されます";
+      ? "「はい」で今日の投稿・返信・バズ検知を自動で始めます"
+      : "⚠ PC作業員(run_all.bat)が起動していません。プランだけ作り、PC起動後に実行されます";
     $("agentModal").classList.remove("hidden");
   }
 }
@@ -540,38 +540,59 @@ function refreshAgent() {
 }
 
 async function refreshAgentStatus() {
-  const status = await api("/api/agent/status");
+  const [status, personas] = await Promise.all([
+    api("/api/agent/status"),
+    api("/api/agent/personas"),
+  ]);
+  const enabledCount = personas.filter((p) => p.enabled).length;
 
-  const workerHost = $("agentWorkerStatus");
-  workerHost.textContent = "";
-  workerHost.appendChild(el("div", { class: "card" }, [
-    el("div", {}, [
-      el("span", { class: status.worker_online ? "dot-ok" : "dot-ng" }),
-      el("span", {
-        text: status.worker_online
-          ? "PC稼働中 — 自動投稿は有効です"
-          : "PCオフライン — PCで run_agent.bat を起動するまで自動投稿されません",
+  // ---- ホームのヒーロー: 「本日の作業を開始しますか？」を主役に ----
+  const hero = $("agentTodayCard");
+  hero.textContent = "";
+  if (personas.length === 0) {
+    // まだ何も登録していない → セットアップへ誘導
+    hero.appendChild(el("div", { class: "card hero" }, [
+      el("div", { class: "hero-title", text: "👋 AI部下へようこそ" }),
+      el("p", {
+        class: "subtle",
+        text: "私があなたの代わりにXを運用します。まず、演じるアカウントを1つ登録してください (テーマと1日の投稿回数を決めるだけ)。",
       }),
-    ]),
-  ]));
-
-  const todayHost = $("agentTodayCard");
-  todayHost.textContent = "";
-  if (!status.has_plan) {
-    todayHost.appendChild(el("div", { class: "card" }, [
-      el("div", { text: "本日のプランは未作成です" }),
       el("button", {
-        class: "primary",
-        text: "本日の投稿作業を開始する",
+        class: "primary big",
+        text: "アカウントを登録する",
         onclick: () => {
-          $("agentModalNote").textContent = status.worker_online
-            ? "※PCの電源が入っている時間帯のみ自動投稿されます"
-            : "⚠ PCのワーカー(run_agent.bat)が起動していません。プランだけ作成し、ワーカー起動後に実行されます";
-          $("agentModal").classList.remove("hidden");
+          const d = $("agentAddDetails");
+          if (d) d.open = true;
+          $("apHandle").scrollIntoView({ behavior: "smooth", block: "center" });
+          setTimeout(() => $("apHandle").focus(), 300);
         },
       }),
     ]));
+  } else if (!status.has_plan) {
+    // 登録済み・本日未開始 → 開始ボタンを主役に
+    const children = [
+      el("div", { class: "hero-title", text: "本日の作業を開始しますか？" }),
+      el("p", {
+        class: "subtle",
+        text: `${enabledCount}アカウントが待機中です。「はい」で今日の投稿・返信チェック・バズ検知を全部おまかせできます。`,
+      }),
+      el("button", {
+        class: "primary big",
+        text: "はい、開始する",
+        onclick: () => startAgentDay(),
+      }),
+    ];
+    if (!status.worker_online) {
+      children.push(el("p", {
+        class: "subtle warn-text",
+        text: "⚠ PC作業員がオフラインです。自宅PCで run_all.bat を起動してください (起動後に実行されます)。",
+      }));
+    }
+    hero.appendChild(el("div", { class: "card hero" }, children));
   } else {
+    // 本日開始済み → 進捗を表示
+    const done = status.jobs.filter((j) => j.status === "done").length;
+    const total = status.jobs.length;
     const jobLines = status.jobs.map((job) => {
       const time = (job.run_at || "").slice(11, 16);
       const kindLabel = AGENT_KIND_LABEL[job.kind] || job.kind;
@@ -581,12 +602,15 @@ async function refreshAgentStatus() {
         el("span", { class: `job-${job.status}`, text: statusLabel }),
       ]);
     });
-    todayHost.appendChild(el("div", { class: "card" }, [
+    hero.appendChild(el("div", { class: "card hero" }, [
+      el("div", { class: "hero-title", text: `本日は稼働中 (${done}/${total} 完了)` }),
+      el("p", { class: "subtle", text: "あとは私におまかせください。進捗は下に随時表示されます。" }),
       ...jobLines,
       el("button", {
         class: "danger",
         text: "本日の残りを停止",
         onclick: async () => {
+          if (!confirm("本日の未実行の作業をすべて止めますか？")) return;
           const r = await post("/api/agent/stop", {});
           toast(r.error || `${r.cancelled}件を停止しました`);
           refreshAgentStatus();
@@ -594,6 +618,19 @@ async function refreshAgentStatus() {
       }),
     ]));
   }
+
+  // ---- PC作業員の稼働状態 (コンパクト表示) ----
+  const workerHost = $("agentWorkerStatus");
+  workerHost.textContent = "";
+  workerHost.appendChild(el("div", { class: "worker-line" }, [
+    el("span", { class: status.worker_online ? "dot-ok" : "dot-ng" }),
+    el("span", {
+      class: "subtle",
+      text: status.worker_online
+        ? "PC作業員: 稼働中"
+        : "PC作業員: オフライン (自宅PCで run_all.bat を起動)",
+    }),
+  ]));
 
   const badge = $("agentReplyBadge");
   badge.textContent = "";

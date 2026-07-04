@@ -25,7 +25,7 @@
 
 <main>
   <!-- ネタ収集 -->
-  <section id="pane-trends" class="pane active">
+  <section id="pane-trends" class="pane">
     <h2 id="trendsTitle">ネタ収集</h2>
     <p class="subtle" id="trendsCriteria"></p>
     <input id="trendsQuery" class="hidden" placeholder="検索キーワード (空欄なら急上昇ワードを自動使用)">
@@ -119,64 +119,68 @@
     <div id="linksList"></div>
   </section>
 
-  <!-- AI部下 -->
-  <section id="pane-agent" class="pane">
-    <h2>AI部下</h2>
-    <div id="agentWorkerStatus"></div>
+  <!-- AI部下 (ホーム) -->
+  <section id="pane-agent" class="pane active">
     <div id="agentTodayCard"></div>
+    <div id="agentWorkerStatus"></div>
     <h3>承認待ちの返信 <span id="agentReplyBadge"></span></h3>
     <div id="agentReplies"></div>
-    <h3>アカウント (ペルソナ)</h3>
+    <h3>演じるアカウント (ペルソナ)</h3>
     <div id="agentPersonas"></div>
-    <div class="card form">
-      <input id="apHandle" placeholder="Xのハンドル (@なし)">
-      <input id="apTheme" placeholder="投稿テーマ (例: 節約×自炊)">
-      <input id="apTone" placeholder="口調 (例: 親しみやすい)">
-      <div class="row">
-        <select id="apCount">
-          <option value="1">1回/日</option>
-          <option value="2" selected>2回/日</option>
-          <option value="3">3回/日</option>
-          <option value="4">4回/日</option>
-          <option value="5">5回/日</option>
-        </select>
-        <select id="apWindow">
-          <option value="9-22">朝〜夜</option>
-          <option value="7-12">朝メイン</option>
-          <option value="12-18">昼メイン</option>
-          <option value="18-23">夜メイン</option>
-        </select>
+    <details id="agentAddDetails">
+      <summary>＋ 新しいアカウントを登録</summary>
+      <div class="card form">
+        <input id="apHandle" placeholder="Xのハンドル (@なし)">
+        <input id="apTheme" placeholder="投稿テーマ (例: 節約×自炊)">
+        <input id="apTone" placeholder="口調 (例: 親しみやすい)">
+        <div class="row">
+          <select id="apCount">
+            <option value="1">1回/日</option>
+            <option value="2" selected>2回/日</option>
+            <option value="3">3回/日</option>
+            <option value="4">4回/日</option>
+            <option value="5">5回/日</option>
+          </select>
+          <select id="apWindow">
+            <option value="9-22">朝〜夜</option>
+            <option value="7-12">朝メイン</option>
+            <option value="12-18">昼メイン</option>
+            <option value="18-23">夜メイン</option>
+          </select>
+        </div>
+        <div class="row">
+          <label><input type="checkbox" id="apAutoReply" checked> 自動返信</label>
+          <select id="apReplyMode">
+            <option value="approve" selected>承認してから送信</option>
+            <option value="auto">全自動で送信</option>
+          </select>
+        </div>
+        <input id="apBuzz" type="number" placeholder="バズ判定のいいね数 (既定30)">
+        <input id="apCross" placeholder="バズ時の横展開先 (例: threads,note)">
+        <input id="apTags" placeholder="毎回付けるハッシュタグ (任意)">
+        <button class="primary" id="apAdd">ペルソナを追加</button>
       </div>
-      <div class="row">
-        <label><input type="checkbox" id="apAutoReply" checked> 自動返信</label>
-        <select id="apReplyMode">
-          <option value="approve" selected>承認してから送信</option>
-          <option value="auto">全自動で送信</option>
-        </select>
-      </div>
-      <input id="apBuzz" type="number" placeholder="バズ判定のいいね数 (既定30)">
-      <input id="apCross" placeholder="バズ時の横展開先 (例: threads,note)">
-      <input id="apTags" placeholder="毎回付けるハッシュタグ (任意)">
-      <button class="primary" id="apAdd">ペルソナを追加</button>
-    </div>
+    </details>
     <h3>活動ログ</h3>
     <div id="agentLogs"></div>
-    <h3>設定</h3>
-    <div class="card form">
-      <input id="agentGeminiKey" placeholder="Gemini APIキー (無料枠でOK・任意)">
-      <button id="agentSaveKey">保存</button>
-      <p class="subtle">キー未設定でも無料の代替エンジンで動きます</p>
-    </div>
+    <details>
+      <summary>&#9881; 文章生成AIの設定</summary>
+      <div class="card form">
+        <input id="agentGeminiKey" placeholder="Gemini APIキー (無料枠でOK・任意)">
+        <button id="agentSaveKey">保存</button>
+        <p class="subtle">キー未設定でも無料の代替エンジンで動きます</p>
+      </div>
+    </details>
   </section>
 </main>
 
 <nav>
-  <button data-pane="trends" class="active"><span>&#128293;</span>ネタ</button>
+  <button data-pane="agent" class="active"><span>&#129302;</span>ホーム</button>
+  <button data-pane="trends"><span>&#128293;</span>ネタ</button>
   <button data-pane="compose"><span>&#9997;&#65039;</span>作成</button>
   <button data-pane="stats"><span>&#128202;</span>実績</button>
   <button data-pane="accounts"><span>&#128100;</span>垢</button>
   <button data-pane="affiliate"><span>&#128176;</span>アフィリ</button>
-  <button data-pane="agent"><span>&#129302;</span>部下</button>
 </nav>
 
 <div id="agentModal" class="modal-overlay hidden">
