@@ -144,3 +144,60 @@ nav button.active { color: #111; font-weight: 700; }
   white-space: nowrap;
 }
 #toast.show { opacity: 1; }
+
+/* AI部下タブ */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, .45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+.modal-overlay.hidden { display: none; }
+.modal-box {
+  background: #fff;
+  border-radius: 16px;
+  padding: 22px;
+  width: 82%;
+  max-width: 340px;
+  text-align: center;
+}
+.modal-title { font-size: 17px; font-weight: 700; margin-bottom: 8px; }
+
+.dot-ok, .dot-ng {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-right: 6px;
+}
+.dot-ok { background: #2ecc71; }
+.dot-ng { background: #e74c3c; }
+
+.log-line { font-size: 12px; padding: 6px 8px; border-bottom: 1px solid #f0f0f0; }
+.log-warn { color: #b7791f; }
+.log-error { color: #c0392b; }
+.log-ok { color: #1e8449; }
+
+.badge {
+  background: #e74c3c;
+  color: #fff;
+  border-radius: 10px;
+  font-size: 11px;
+  padding: 1px 7px;
+  margin-left: 4px;
+}
+
+.job-line {
+  font-size: 12.5px;
+  padding: 5px 8px;
+  display: flex;
+  justify-content: space-between;
+  border-bottom: 1px solid #f2f2f2;
+}
+.job-done { color: #1e8449; }
+.job-error { color: #c0392b; }
+.job-skipped { color: #999; }
+.job-running { color: #2471a3; font-weight: 600; }

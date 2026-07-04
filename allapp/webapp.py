@@ -35,6 +35,11 @@ from .config import (
 from .database import Database
 from .prompts import CONTENT_TYPES, build_prompt
 from .trends import fetch_trends, query_mode
+from .agent import store as agent_store
+from .agent import scheduler as agent_scheduler
+
+# AI部下のテーブルを用意 (ワーカー未起動でもUIが使えるように)
+agent_store.init_schema()
 
 STATIC_DIR = Path(__file__).parent / "web" / "static"
 
@@ -344,6 +349,139 @@ def api_links_add():
 @app.delete("/api/links/<int:link_id>")
 def api_links_delete(link_id: int):
     get_db().delete_affiliate_link(link_id)
+    return jsonify({"ok": True})
+
+
+# ================================================================ AI部下
+@app.get("/api/agent/status")
+def api_agent_status():
+    """ワーカー稼働状態・当日プラン・承認待ち件数 (UIが10秒毎にポーリング)"""
+    return jsonify({
+        "worker_online": agent_store.worker_online(),
+        "has_plan": agent_store.has_plan_for_today(),
+        "jobs": agent_store.jobs_today(),
+        "pending_replies": len(agent_store.list_reply_candidates("pending")),
+    })
+
+
+@app.post("/api/agent/start_day")
+def api_agent_start_day():
+    """「本日の投稿作業を開始しますか？→はい」の実体"""
+    if not agent_store.list_personas(enabled_only=True):
+        return jsonify({"error": "有効なアカウント(ペルソナ)がありません。"
+                                 "先にペルソナを追加してください"}), 400
+    if agent_store.has_plan_for_today():
+        return jsonify({"error": "本日のプランは作成済みです"}), 400
+    result = agent_scheduler.plan_today()
+    if not agent_store.worker_online():
+        agent_store.log("warn",
+                        "プランを作成しましたが、PCのワーカーが起動していません。"
+                        "PCで run_agent.bat を起動してください")
+    return jsonify({"ok": True, **result})
+
+
+@app.post("/api/agent/stop")
+def api_agent_stop():
+    n = agent_store.cancel_pending_jobs()
+    agent_store.log("warn", f"停止ボタン: 未実行のジョブ{n}件を取り消しました")
+    return jsonify({"ok": True, "cancelled": n})
+
+
+@app.get("/api/agent/personas")
+def api_agent_personas():
+    return jsonify(agent_store.list_personas())
+
+
+@app.post("/api/agent/personas")
+def api_agent_personas_add():
+    data = request.get_json(force=True)
+    handle = (data.get("handle") or "").strip().lstrip("@")
+    theme = (data.get("theme") or "").strip()
+    if not handle or not theme:
+        return jsonify({"error": "ハンドルとテーマは必須です"}), 400
+    data["handle"] = handle
+    data["platform"] = data.get("platform") or "x"
+    pid = agent_store.add_persona(data)
+    agent_store.log("info", f"ペルソナ @{handle} を追加しました。"
+                            "「ログイン準備」を実行してください")
+    return jsonify({"ok": True, "id": pid})
+
+
+@app.patch("/api/agent/personas/<int:persona_id>")
+def api_agent_personas_update(persona_id: int):
+    data = request.get_json(force=True)
+    # 再有効化したら連続失敗カウントもリセットする
+    if data.get("enabled"):
+        data["fail_streak"] = 0
+    agent_store.update_persona(persona_id, data)
+    return jsonify({"ok": True})
+
+
+@app.delete("/api/agent/personas/<int:persona_id>")
+def api_agent_personas_delete(persona_id: int):
+    agent_store.delete_persona(persona_id)
+    return jsonify({"ok": True})
+
+
+@app.post("/api/agent/personas/<int:persona_id>/login")
+def api_agent_personas_login(persona_id: int):
+    """PC画面にログイン用ブラウザを開くジョブを積む"""
+    if not agent_store.worker_online():
+        return jsonify({"error": "PCのワーカーが起動していません。"
+                                 "先に run_agent.bat を起動してください"}), 400
+    agent_store.add_job(persona_id, "login", agent_store.now_str())
+    return jsonify({"ok": True,
+                    "message": "PC画面にブラウザが開きます。"
+                               "ログイン後、そのウィンドウを閉じてください"})
+
+
+@app.get("/api/agent/replies")
+def api_agent_replies():
+    return jsonify(agent_store.list_reply_candidates("pending"))
+
+
+@app.post("/api/agent/replies/<int:cand_id>/approve")
+def api_agent_reply_approve(cand_id: int):
+    data = request.get_json(silent=True) or {}
+    edited = (data.get("our_reply") or "").strip() or None
+    cand = agent_store.get_reply_candidate(cand_id)
+    if cand is None or cand["status"] != "pending":
+        return jsonify({"error": "候補が見つかりません"}), 404
+    agent_store.set_reply_candidate_status(cand_id, "approved", edited)
+    agent_store.add_job(cand["persona_id"], "send_reply",
+                        agent_store.now_str(), payload=str(cand_id))
+    return jsonify({"ok": True})
+
+
+@app.post("/api/agent/replies/<int:cand_id>/reject")
+def api_agent_reply_reject(cand_id: int):
+    cand = agent_store.get_reply_candidate(cand_id)
+    if cand:
+        agent_store.set_reply_candidate_status(cand_id, "rejected")
+        agent_store.mark_reply_seen(cand["persona_id"], cand["reply_key"])
+    return jsonify({"ok": True})
+
+
+@app.get("/api/agent/logs")
+def api_agent_logs():
+    return jsonify(agent_store.recent_logs(40))
+
+
+@app.get("/api/agent/settings")
+def api_agent_settings():
+    key = agent_store.get_setting("gemini_api_key")
+    return jsonify({
+        "gemini_api_key_set": bool(key),
+        "gemini_api_key_tail": key[-4:] if key else "",
+    })
+
+
+@app.post("/api/agent/settings")
+def api_agent_settings_save():
+    data = request.get_json(force=True)
+    if "gemini_api_key" in data:
+        agent_store.set_setting("gemini_api_key",
+                                (data.get("gemini_api_key") or "").strip())
     return jsonify({"ok": True})
 
 

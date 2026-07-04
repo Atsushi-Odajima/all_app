@@ -133,6 +133,7 @@ async function boot() {
   bindActions();
   await reloadLinks();
   selectPlatform(state.init.platforms[0].id);
+  initAgent();
 }
 
 function platformById(id) {
@@ -461,6 +462,291 @@ function bindActions() {
     toast("登録しました");
     reloadLinks();
   });
+}
+
+// ---------------------------------------------------------------- AI部下
+const AGENT_KIND_LABEL = {
+  post: "投稿",
+  reply_check: "返信チェック",
+  buzz_check: "バズチェック",
+  send_reply: "返信送信",
+  login: "ログイン準備",
+};
+const AGENT_STATUS_LABEL = {
+  pending: "待機",
+  running: "実行中",
+  done: "完了",
+  error: "失敗",
+  skipped: "スキップ",
+};
+
+function initAgent() {
+  $("apAdd").addEventListener("click", () =>
+    addAgentPersona().catch((e) => toast(e.message)));
+  $("agentSaveKey").addEventListener("click", () =>
+    saveAgentKey().catch((e) => toast(e.message)));
+  $("agentModalYes").addEventListener("click", () =>
+    startAgentDay().catch((e) => toast(e.message)));
+  $("agentModalNo").addEventListener("click", () => {
+    $("agentModal").classList.add("hidden");
+  });
+
+  refreshAgent();
+  checkAgentMorningModal();
+
+  setInterval(() => {
+    const active = $("pane-agent").classList.contains("active");
+    if (document.visibilityState === "visible" && active) {
+      refreshAgentStatus();
+      refreshAgentLogs();
+      refreshAgentReplies();
+    }
+  }, 10000);
+}
+
+async function checkAgentMorningModal() {
+  const status = await api("/api/agent/status");
+  const personas = await api("/api/agent/personas");
+  if (!status.has_plan && personas.length > 0) {
+    $("agentModalNote").textContent = status.worker_online
+      ? "※PCの電源が入っている時間帯のみ自動投稿されます"
+      : "⚠ PCのワーカー(run_agent.bat)が起動していません。プランだけ作成し、ワーカー起動後に実行されます";
+    $("agentModal").classList.remove("hidden");
+  }
+}
+
+async function startAgentDay() {
+  try {
+    const r = await post("/api/agent/start_day", {});
+    if (r.error) {
+      toast(r.error);
+      return;
+    }
+    toast(`プラン作成: 投稿${r.posts}件`);
+    $("agentModal").classList.add("hidden");
+    document.querySelector('nav button[data-pane="agent"]').click();
+    refreshAgent();
+  } catch (e) {
+    toast(e.message);
+  }
+}
+
+function refreshAgent() {
+  refreshAgentStatus();
+  refreshAgentPersonas();
+  refreshAgentReplies();
+  refreshAgentLogs();
+  refreshAgentSettings();
+}
+
+async function refreshAgentStatus() {
+  const status = await api("/api/agent/status");
+
+  const workerHost = $("agentWorkerStatus");
+  workerHost.textContent = "";
+  workerHost.appendChild(el("div", { class: "card" }, [
+    el("div", {}, [
+      el("span", { class: status.worker_online ? "dot-ok" : "dot-ng" }),
+      el("span", {
+        text: status.worker_online
+          ? "PC稼働中 — 自動投稿は有効です"
+          : "PCオフライン — PCで run_agent.bat を起動するまで自動投稿されません",
+      }),
+    ]),
+  ]));
+
+  const todayHost = $("agentTodayCard");
+  todayHost.textContent = "";
+  if (!status.has_plan) {
+    todayHost.appendChild(el("div", { class: "card" }, [
+      el("div", { text: "本日のプランは未作成です" }),
+      el("button", {
+        class: "primary",
+        text: "本日の投稿作業を開始する",
+        onclick: () => {
+          $("agentModalNote").textContent = status.worker_online
+            ? "※PCの電源が入っている時間帯のみ自動投稿されます"
+            : "⚠ PCのワーカー(run_agent.bat)が起動していません。プランだけ作成し、ワーカー起動後に実行されます";
+          $("agentModal").classList.remove("hidden");
+        },
+      }),
+    ]));
+  } else {
+    const jobLines = status.jobs.map((job) => {
+      const time = (job.run_at || "").slice(11, 16);
+      const kindLabel = AGENT_KIND_LABEL[job.kind] || job.kind;
+      const statusLabel = AGENT_STATUS_LABEL[job.status] || job.status;
+      return el("div", { class: "job-line" }, [
+        el("span", { text: `${time} ${kindLabel} @${job.handle}` }),
+        el("span", { class: `job-${job.status}`, text: statusLabel }),
+      ]);
+    });
+    todayHost.appendChild(el("div", { class: "card" }, [
+      ...jobLines,
+      el("button", {
+        class: "danger",
+        text: "本日の残りを停止",
+        onclick: async () => {
+          const r = await post("/api/agent/stop", {});
+          toast(r.error || `${r.cancelled}件を停止しました`);
+          refreshAgentStatus();
+        },
+      }),
+    ]));
+  }
+
+  const badge = $("agentReplyBadge");
+  badge.textContent = "";
+  if (status.pending_replies > 0) {
+    badge.appendChild(el("span", { class: "badge", text: String(status.pending_replies) }));
+  }
+}
+
+async function refreshAgentPersonas() {
+  const rows = await api("/api/agent/personas");
+  const host = $("agentPersonas");
+  host.textContent = "";
+  for (const p of rows) {
+    const replyState = p.auto_reply
+      ? (p.reply_mode === "auto" ? "全自動" : "承認制")
+      : "OFF";
+    const children = [
+      el("div", { class: "title", text: `@${p.handle} (${p.enabled ? "稼働中" : "停止中"})` }),
+      el("div", {
+        class: "meta",
+        text: `テーマ: ${p.theme} / ${p.posts_per_day}回/日 ${p.window_start}-${p.window_end}時 / 返信${replyState}`,
+      }),
+    ];
+    if (p.fail_streak >= 3) {
+      children.push(el("div", {
+        class: "meta",
+        style: "color:#c0392b",
+        text: "⚠ 連続失敗により自動停止しました。ログイン準備をやり直して再開してください",
+      }));
+    }
+    children.push(el("div", { class: "row" }, [
+      el("button", {
+        text: "ログイン準備",
+        onclick: async () => {
+          const r = await post(`/api/agent/personas/${p.id}/login`, {});
+          toast(r.message || r.error);
+        },
+      }),
+      el("button", {
+        text: p.enabled ? "停止" : "稼働",
+        onclick: async () => {
+          await patch(`/api/agent/personas/${p.id}`, { enabled: p.enabled ? 0 : 1 });
+          refreshAgentPersonas();
+        },
+      }),
+      el("button", {
+        class: "danger",
+        text: "削除",
+        onclick: async () => {
+          if (!confirm(`@${p.handle} を削除しますか？`)) return;
+          await del(`/api/agent/personas/${p.id}`);
+          refreshAgentPersonas();
+        },
+      }),
+    ]));
+    host.appendChild(el("div", { class: "card" }, children));
+  }
+}
+
+async function refreshAgentReplies() {
+  const rows = await api("/api/agent/replies");
+  const host = $("agentReplies");
+  host.textContent = "";
+  if (rows.length === 0) {
+    host.appendChild(el("p", { class: "subtle", text: "承認待ちの返信はありません" }));
+    return;
+  }
+  for (const r of rows) {
+    const input = el("input", { value: r.our_reply || "" });
+    host.appendChild(el("div", { class: "card" }, [
+      el("div", { class: "title", text: `@${r.author} さんから (@${r.handle}宛)` }),
+      el("div", { class: "meta", text: r.their_text }),
+      input,
+      el("div", { class: "row" }, [
+        el("button", {
+          class: "primary",
+          text: "この内容で返信",
+          onclick: async () => {
+            await post(`/api/agent/replies/${r.id}/approve`, { our_reply: input.value });
+            toast("返信を予約しました");
+            refreshAgentReplies();
+          },
+        }),
+        el("button", {
+          text: "返信しない",
+          onclick: async () => {
+            await post(`/api/agent/replies/${r.id}/reject`, {});
+            refreshAgentReplies();
+          },
+        }),
+      ]),
+    ]));
+  }
+}
+
+async function refreshAgentLogs() {
+  const rows = await api("/api/agent/logs");
+  const host = $("agentLogs");
+  host.textContent = "";
+  for (const log of rows) {
+    const cls = log.level === "warn" ? "log-warn"
+      : log.level === "error" ? "log-error"
+      : log.level === "ok" ? "log-ok" : "";
+    host.appendChild(el("div", {
+      class: cls ? `log-line ${cls}` : "log-line",
+      text: `${log.at.slice(5, 16)} ${log.message}`,
+    }));
+  }
+}
+
+async function refreshAgentSettings() {
+  const s = await api("/api/agent/settings");
+  if (s.gemini_api_key_set) {
+    $("agentGeminiKey").placeholder = `設定済み (末尾: ${s.gemini_api_key_tail}) — 変更する場合のみ入力`;
+  }
+}
+
+async function addAgentPersona() {
+  const handle = $("apHandle").value.trim();
+  const theme = $("apTheme").value.trim();
+  if (!handle || !theme) return toast("ハンドルとテーマを入力してください");
+  const [windowStart, windowEnd] = $("apWindow").value.split("-");
+  await post("/api/agent/personas", {
+    platform: "x",
+    handle,
+    theme,
+    tone: $("apTone").value.trim(),
+    posts_per_day: Number($("apCount").value),
+    window_start: windowStart,
+    window_end: windowEnd,
+    auto_reply: $("apAutoReply").checked,
+    reply_mode: $("apReplyMode").value,
+    buzz_threshold: $("apBuzz").value,
+    cross_targets: $("apCross").value.trim(),
+    hashtags: $("apTags").value.trim(),
+  });
+  $("apHandle").value = "";
+  $("apTheme").value = "";
+  $("apTone").value = "";
+  $("apBuzz").value = "";
+  $("apCross").value = "";
+  $("apTags").value = "";
+  toast("追加しました。ログイン準備を実行してください");
+  refreshAgentPersonas();
+}
+
+async function saveAgentKey() {
+  const key = $("agentGeminiKey").value.trim();
+  if (!key) return toast("キーを入力してください");
+  await post("/api/agent/settings", { gemini_api_key: key });
+  toast("保存しました");
+  $("agentGeminiKey").value = "";
+  refreshAgentSettings();
 }
 
 boot().catch((e) => toast(`初期化エラー: ${e.message}`));
