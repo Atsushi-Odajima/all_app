@@ -38,7 +38,22 @@
 
 **PC (デスクトップ版):** `run.bat` をダブルクリック (または `python main.py`)
 
-**外出先から使う (Web公開版):**
+**外出先から使う・おすすめ (安定版・URL固定・Tailscale):**
+1. PCとiPhoneに [Tailscale](https://tailscale.com/download) を入れて
+   同じアカウント (Google/Apple等) でログイン (最初の1回だけ)
+2. PCで `run_all.bat` をダブルクリック
+   (AI部下ワーカー + サーバーが一括起動。サーバーだけなら `run_stable.bat`)
+3. 画面に表示される `https://<PC名>.<tailnet>.ts.net` をiPhoneで開く
+   - このURLは**今後ずっと変わりません** (ホーム画面に追加が活きる)
+   - 初回はHTTPS有効化の案内URLが表示されるので、PCのブラウザで開いて
+     「Enable」を押すだけ (それまではHTTP版のURLで動作)
+4. 8桁のログインPINを入力 → 共有ボタン → 「ホーム画面に追加」
+
+- あなたのTailscaleアカウントの端末しかアクセスできず、PIN認証と二重の守り
+- iPhone側はTailscaleアプリのスイッチをONにしておくこと
+- `setup_autostart.bat` を1回実行すると、PC起動時に全部自動で立ち上がります
+
+**外出先から使う (簡易版・URLが毎回変わる・Cloudflare):**
 1. PCで `run_web.bat` をダブルクリック (または `python web.py`)
    - 初回のみCloudflare公式のトンネルクライアント (約60MB) を自動取得します
 2. 画面に表示される `https://～.trycloudflare.com` のURLをiPhoneで開く
@@ -198,8 +213,11 @@ iPhone (PWA)                    PC
 all-app/
 ├─ main.py               デスクトップ版エントリポイント
 ├─ mobile.py             モバイル版サーバー (自宅Wi-Fi用)
-├─ web.py                Web公開版ランチャー (外出先用・Cloudflare Tunnel)
-├─ run.bat / run_mobile.bat / run_web.bat  起動用バッチ
+├─ stable.py             安定公開版ランチャー (Tailscale固定URL・おすすめ)
+├─ web.py                Web公開版ランチャー (Cloudflare Tunnel・URL可変)
+├─ agent_worker.py       AI部下ワーカー (自動投稿の実行体)
+├─ run.bat / run_mobile.bat / run_web.bat / run_stable.bat /
+│  run_agent.bat / run_all.bat / setup_autostart.bat  起動用バッチ
 ├─ allapp/
 │  ├─ config.py          プラットフォーム定義 (追加はここ)
 │  ├─ database.py        SQLite (アカウント/実績/下書き)
