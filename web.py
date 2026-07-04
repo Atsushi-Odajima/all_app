@@ -6,7 +6,7 @@
   無料で発行される (Cloudflareアカウント不要のクイックトンネル)。
 
 セキュリティ:
-  - アクセスには8桁PINが必要 (~/.allapp/mobile_pin.txt、起動画面に表示)
+  - アクセスにはPINが必要 (~/.allapp/mobile_pin.txt、起動画面に表示)
   - URLは起動のたびに変わるランダムな trycloudflare.com サブドメイン
   - PCの電源が入っている間だけアクセス可能
 
