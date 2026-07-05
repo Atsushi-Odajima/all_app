@@ -127,11 +127,24 @@ def login_post():
     return _LOGIN_PAGE.format(error="PINが違います"), 401
 
 
+# iOSがホーム画面追加時にルート直下を探しに来るアイコン類。
+# 認証を免除しないと、iOSが画像の代わりにログインHTMLを受け取って
+# アイコンが灰色の「A」になってしまう。
+_PUBLIC_ICON_PATHS = {
+    "/apple-touch-icon.png",
+    "/apple-touch-icon-precomposed.png",
+    "/favicon.ico",
+    "/manifest.webmanifest",
+}
+
+
 @app.before_request
 def require_auth():
     if request.path in ("/login",) or request.path.startswith("/static/"):
         return None
-    if request.path == "/manifest.webmanifest":
+    if request.path in _PUBLIC_ICON_PATHS:
+        return None
+    if request.path.startswith("/apple-touch-icon"):  # サイズ違いの派生名も許可
         return None
     if session.get("auth"):
         return None
@@ -160,6 +173,18 @@ def close_db(_exc) -> None:
 @app.get("/")
 def index():
     return send_from_directory(STATIC_DIR, "index.html")
+
+
+@app.get("/apple-touch-icon.png")
+@app.get("/apple-touch-icon-precomposed.png")
+@app.get("/favicon.ico")
+def root_icons():
+    """iOSがルート直下を探しに来るアイコンを配信する
+    (ホーム画面追加時にアイコンが正しく表示されるように)"""
+    name = "apple-touch-icon.png"
+    if request.path == "/favicon.ico":
+        name = "star_32.png"
+    return send_from_directory(STATIC_DIR, name)
 
 
 @app.get("/manifest.webmanifest")
