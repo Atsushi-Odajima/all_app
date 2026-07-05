@@ -10,7 +10,8 @@ import urllib.parse
 
 import requests
 
-from ..prompts import PLATFORM_RULES
+from ..config import PLATFORM_BY_ID
+from ..prompts import CATEGORY_RULES, PLATFORM_RULES
 from . import store
 
 GEMINI_MODEL = "gemini-2.5-flash"
@@ -126,10 +127,18 @@ _TEMPLATE_PATTERNS = [
 
 
 def generate_post(persona: dict) -> tuple[str, str]:
-    """ペルソナのテーマに沿った投稿文を生成する。(本文, エンジン名) を返す"""
+    """ペルソナのテーマ・プラットフォームに沿った投稿文を生成する。
+
+    X は短文(140字)、noteは長文、といったプラットフォーム別ルールを反映する。
+    (本文, エンジン名) を返す。
+    """
     theme = persona["theme"]
     tone = persona.get("tone") or "親しみやすい"
     hashtags = (persona.get("hashtags") or "").strip()
+    platform_id = persona["platform"]
+    platform = PLATFORM_BY_ID.get(platform_id)
+    platform_name = platform.name if platform else "X (Twitter)"
+
     recent = store.recent_agent_posts(persona["id"], limit=5)
     recent_block = ""
     if recent:
@@ -140,8 +149,12 @@ def generate_post(persona: dict) -> tuple[str, str]:
     topic_block = f"\n## 今バズっている関連ネタ (使えそうなら絡めてよい)\n{topic}\n" \
         if topic else ""
 
-    rules = PLATFORM_RULES.get(persona["platform"], "")
-    prompt = f"""あなたはSNS運用者本人としてX(Twitter)に投稿する日本語の文章を書きます。
+    # プラットフォーム個別ルール → カテゴリ別ルールの順でフォールバック
+    rules = PLATFORM_RULES.get(platform_id) or (
+        CATEGORY_RULES.get(platform.category, "") if platform else "")
+    length_rule = ("- 全角130字以内、1案のみ" if platform_id == "x"
+                   else "- そのプラットフォームの標準的な長さで、1案のみ")
+    prompt = f"""あなたはSNS運用者本人として {platform_name} に投稿する日本語の文章を書きます。
 
 ## あなたのキャラクター
 - テーマ: {theme}
@@ -150,7 +163,7 @@ def generate_post(persona: dict) -> tuple[str, str]:
 
 ## ルール
 {rules}
-- 全角130字以内、1案のみ
+{length_rule}
 - 本文だけを出力する (ラベル・説明・引用符・ハッシュタグは書かない)
 - 絵文字は0〜2個
 {recent_block}{topic_block}"""
@@ -158,13 +171,17 @@ def generate_post(persona: dict) -> tuple[str, str]:
     text, engine = _call_llm(prompt)
     if text:
         text = _clean_output(text)
-        # 複数案が返ってきた場合は最初の段落だけ使う
-        text = text.split("\n\n")[0].strip()
     if not text:
         pattern = random.choice(_TEMPLATE_PATTERNS)
         text = pattern.format(theme=theme)
         engine = "テンプレ"
-    return _truncate_for_x(text, hashtags), engine
+    if platform_id == "x":
+        # X だけは複数案の混入を防いで最初の段落＋140字に収める
+        text = text.split("\n\n")[0].strip()
+        return _truncate_for_x(text, hashtags), engine
+    if hashtags:
+        text = f"{text}\n{hashtags}"
+    return text, engine
 
 
 # ---------------------------------------------------------------- 横展開

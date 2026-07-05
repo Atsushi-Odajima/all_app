@@ -1,9 +1,8 @@
 @echo off
-rem All/Agent をワンクリックで全部起動する:
-rem   1. AI部下ワーカー (自動投稿の実行体) を別ウィンドウで起動
-rem   2. サーバー (iPhoneからの窓口・Tailscale固定URL) をこのウィンドウで起動
+rem All/Agent をワンクリックで全部起動する。
+rem サーバー(stable.py)が AI部下ワーカーを子プロセスとして自動起動・監視する
+rem ため、これ1つでサーバーとワーカーの両方が立ち上がる。
 cd /d "%~dp0"
-title All/Agent 一括起動
-start "All/Agent AI部下ワーカー" cmd /c run_agent.bat
+title All/Agent
 python stable.py
 pause

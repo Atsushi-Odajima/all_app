@@ -127,8 +127,13 @@ async function boot() {
       document.querySelectorAll(".pane").forEach(
         (p) => p.classList.toggle(
           "active", p.id === `pane-${btn.dataset.pane}`));
+      // ヘッダーのプラットフォーム選択はホーム(エージェント)では無関係なので隠す
+      $("platformSelect").classList.toggle(
+        "hidden", btn.dataset.pane === "agent");
     });
   });
+  // 初期表示はホーム(エージェント)なのでヘッダーのセレクタは隠す
+  $("platformSelect").classList.add("hidden");
 
   bindActions();
   await reloadLinks();
@@ -480,7 +485,41 @@ const AGENT_STATUS_LABEL = {
   skipped: "スキップ",
 };
 
+function agentPlatformName(id) {
+  const p = (state.init.platforms || []).find((x) => x.id === id);
+  return p ? p.name : id;
+}
+
+function updateApPlatformNote() {
+  const id = $("apPlatform").value;
+  const note = $("apPlatformNote");
+  if (id === "x") {
+    note.textContent = "✅ 完全自動: AI部下が文章を作ってXに自動投稿します";
+    note.style.color = "#1e8449";
+  } else {
+    note.textContent =
+      `📝 下書きモード: ${agentPlatformName(id)}向けの文章を自動生成し、`
+      + "「作成」タブの下書きに保存します (1タップで投稿)";
+    note.style.color = "#555";
+  }
+}
+
 function initAgent() {
+  // ペルソナ用プラットフォーム選択 (ヘッダーと同じカテゴリ別)
+  const psel = $("apPlatform");
+  for (const cat of state.init.categories) {
+    const group = el("optgroup", { label: cat });
+    for (const p of state.init.platforms) {
+      if (p.category === cat) {
+        group.appendChild(el("option", { value: p.id, text: p.name }));
+      }
+    }
+    psel.appendChild(group);
+  }
+  psel.value = "x";
+  psel.addEventListener("change", updateApPlatformNote);
+  updateApPlatformNote();
+
   $("apAdd").addEventListener("click", () =>
     addAgentPersona().catch((e) => toast(e.message)));
   $("agentSaveKey").addEventListener("click", () =>
@@ -555,7 +594,7 @@ async function refreshAgentStatus() {
       el("div", { class: "hero-title", text: "👋 AI部下へようこそ" }),
       el("p", {
         class: "subtle",
-        text: "私があなたの代わりにXを運用します。まず、演じるアカウントを1つ登録してください (テーマと1日の投稿回数を決めるだけ)。",
+        text: "私があなたの代わりにSNSを運用します。まず、演じるアカウントを1つ登録してください (プラットフォーム・テーマ・1日の投稿回数を決めるだけ)。",
       }),
       el("button", {
         class: "primary big",
@@ -644,48 +683,53 @@ async function refreshAgentPersonas() {
   const host = $("agentPersonas");
   host.textContent = "";
   for (const p of rows) {
-    const replyState = p.auto_reply
-      ? (p.reply_mode === "auto" ? "全自動" : "承認制")
-      : "OFF";
+    const isX = p.platform === "x";
+    const platName = agentPlatformName(p.platform);
+    const mode = isX
+      ? `返信${p.auto_reply ? (p.reply_mode === "auto" ? "全自動" : "承認制") : "OFF"}`
+      : "下書きモード";
     const children = [
       el("div", { class: "title", text: `@${p.handle} (${p.enabled ? "稼働中" : "停止中"})` }),
       el("div", {
         class: "meta",
-        text: `テーマ: ${p.theme} / ${p.posts_per_day}回/日 ${p.window_start}-${p.window_end}時 / 返信${replyState}`,
+        text: `${platName} / テーマ: ${p.theme} / ${p.posts_per_day}回/日 ${p.window_start}-${p.window_end}時 / ${mode}`,
       }),
     ];
-    if (p.fail_streak >= 3) {
+    if (isX && p.fail_streak >= 3) {
       children.push(el("div", {
         class: "meta",
         style: "color:#c0392b",
         text: "⚠ 連続失敗により自動停止しました。ログイン準備をやり直して再開してください",
       }));
     }
-    children.push(el("div", { class: "row" }, [
-      el("button", {
+    const buttons = [];
+    if (isX) {
+      // 下書きモード(X以外)はブラウザログイン不要なのでボタンを出さない
+      buttons.push(el("button", {
         text: "ログイン準備",
         onclick: async () => {
           const r = await post(`/api/agent/personas/${p.id}/login`, {});
           toast(r.message || r.error);
         },
-      }),
-      el("button", {
-        text: p.enabled ? "停止" : "稼働",
-        onclick: async () => {
-          await patch(`/api/agent/personas/${p.id}`, { enabled: p.enabled ? 0 : 1 });
-          refreshAgentPersonas();
-        },
-      }),
-      el("button", {
-        class: "danger",
-        text: "削除",
-        onclick: async () => {
-          if (!confirm(`@${p.handle} を削除しますか？`)) return;
-          await del(`/api/agent/personas/${p.id}`);
-          refreshAgentPersonas();
-        },
-      }),
-    ]));
+      }));
+    }
+    buttons.push(el("button", {
+      text: p.enabled ? "停止" : "稼働",
+      onclick: async () => {
+        await patch(`/api/agent/personas/${p.id}`, { enabled: p.enabled ? 0 : 1 });
+        refreshAgentPersonas();
+      },
+    }));
+    buttons.push(el("button", {
+      class: "danger",
+      text: "削除",
+      onclick: async () => {
+        if (!confirm(`@${p.handle} を削除しますか？`)) return;
+        await del(`/api/agent/personas/${p.id}`);
+        refreshAgentPersonas();
+      },
+    }));
+    children.push(el("div", { class: "row" }, buttons));
     host.appendChild(el("div", { class: "card" }, children));
   }
 }
@@ -754,7 +798,7 @@ async function addAgentPersona() {
   if (!handle || !theme) return toast("ハンドルとテーマを入力してください");
   const [windowStart, windowEnd] = $("apWindow").value.split("-");
   await post("/api/agent/personas", {
-    platform: "x",
+    platform: $("apPlatform").value,
     handle,
     theme,
     tone: $("apTone").value.trim(),

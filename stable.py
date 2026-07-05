@@ -26,6 +26,28 @@ from allapp.webapp import app, get_pin, lan_ip
 
 PORT = 8787
 TAILSCALE = shutil.which("tailscale") or r"C:\Program Files\Tailscale\tailscale.exe"
+HERE = Path(__file__).parent
+WORKER_SCRIPT = HERE / "agent_worker.py"
+
+
+def start_worker() -> "subprocess.Popen | None":
+    """AI部下ワーカーを子プロセスとして起動し、死んだら自動で再起動する。
+
+    run_all.bat の 'start 別ウィンドウ' 方式は環境によって起動しないことが
+    あるため、サーバー(このプロセス)がワーカーの面倒を直接見る。
+    ワーカーが動いていれば iPhone のホームが「PC稼働中」になる。
+    """
+    def supervise() -> None:
+        while True:
+            proc = subprocess.Popen(
+                [sys.executable, str(WORKER_SCRIPT)],
+                cwd=str(HERE),
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            )
+            proc.wait()  # ワーカーが終了したら (クラッシュ含む)
+            time.sleep(5)  # 少し待って再起動 (暴走ループ防止)
+
+    threading.Thread(target=supervise, daemon=True).start()
 
 
 def _ts(*args: str, timeout: int = 15) -> subprocess.CompletedProcess:
@@ -112,6 +134,7 @@ def main() -> None:
         return
 
     threading.Thread(target=run_server, daemon=True).start()
+    start_worker()  # AI部下ワーカーを起動・監視 (PC作業員をオンラインにする)
 
     ok, note = enable_serve()
     print()

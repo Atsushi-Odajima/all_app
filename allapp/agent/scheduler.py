@@ -29,6 +29,10 @@ def plan_today() -> dict:
         if not times:
             continue
         last_post = max(times)
+        # 返信チェック・バズ検知はX(完全自動投稿)のペルソナのみ。
+        # 他プラットフォームは下書きモードなので投稿以外のジョブは作らない。
+        if p["platform"] != "x":
+            continue
         # 日付をまたぐと翌日の「プラン作成済み」誤判定になるため23:50で頭打ち
         day_end = now.replace(hour=23, minute=50, second=0, microsecond=0)
         if p["auto_reply"]:
@@ -127,7 +131,20 @@ def _run_login(persona: dict) -> tuple[str, str]:
 
 def _run_post(job: dict, persona: dict) -> tuple[str, str]:
     handle = persona["handle"]
+    platform_id = persona["platform"]
     text, engine = generator.generate_post(persona)
+
+    # X以外は下書きモード: 自動投稿せず、作成タブから1タップ投稿できる下書きを残す
+    if platform_id != "x":
+        platform = PLATFORM_BY_ID.get(platform_id)
+        pname = platform.name if platform else platform_id
+        _add_draft(platform_id, f"[AI部下] {text[:20]}", text)
+        store.add_agent_post(persona["id"], platform_id, text, "")
+        store.log("ok",
+                  f"@{handle}: {pname}向けの下書きを作成 ({engine})。"
+                  "「作成」タブ→下書きから1タップで投稿できます")
+        return "done", "下書き作成"
+
     store.log("info", f"@{handle}: 投稿文を生成 ({engine}) → 投稿します")
     with poster.open_context(persona["platform"], handle) as ctx:
         if not poster.check_logged_in(ctx):
@@ -155,6 +172,8 @@ def _run_post(job: dict, persona: dict) -> tuple[str, str]:
 
 
 def _run_reply_check(persona: dict) -> tuple[str, str]:
+    if persona["platform"] != "x":
+        return "skipped", "X以外は自動返信の対象外"
     handle = persona["handle"]
     targets = store.posts_for_reply_check(persona["id"])
     if not targets:
@@ -230,6 +249,8 @@ def _run_send_reply(job: dict, persona: dict) -> tuple[str, str]:
 
 
 def _run_buzz_check(persona: dict) -> tuple[str, str]:
+    if persona["platform"] != "x":
+        return "skipped", "X以外はバズ検知の対象外"
     handle = persona["handle"]
     targets = store.posts_for_buzz_check(persona["id"])
     if not targets:
